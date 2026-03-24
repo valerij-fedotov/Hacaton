@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000'; // если бэкенд на этом порту
+const API_BASE = 'http://91.194.3.53:8000';   
 
 export const api = axios.create({
   baseURL: API_BASE,

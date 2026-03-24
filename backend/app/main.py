@@ -6,7 +6,11 @@ app = FastAPI(title="DTP Form Constructor API", version="2.0.0", redirect_slashe
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://91.194.3.53:5173"
+        ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

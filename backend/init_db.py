@@ -5,6 +5,10 @@ from sqlalchemy import text
 
 async def init_db():
     async with engine.begin() as conn:
+        # Создаём схему, если её нет
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS constructor"))
+        print("Schema created")
+
         # Создаём таблицы
         await conn.run_sync(Base.metadata.create_all)
         print("Tables created")

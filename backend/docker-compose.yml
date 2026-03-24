@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:15
+    container_name: dtp_postgres
+    environment:
+      POSTGRES_USER: dtp_user
+      POSTGRES_PASSWORD: dtp_pass
+      POSTGRES_DB: dtp_forms
+      POSTGRES_HOST_AUTH_METHOD: trust  # для простоты локальной разработки
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtp_user -d dtp_forms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: dtp_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dtp_user:dtp_pass@db:5432/dtp_forms
+    command: >
+      sh -c "
+        python init_db.py &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+
+volumes:
+  postgres_data:

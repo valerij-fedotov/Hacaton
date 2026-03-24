@@ -39,7 +39,7 @@ class Field(FieldBase):
 # ---------- Forms ----------
 class FormBase(BaseModel):
     name: str
-    field_ids: List[int]   # фронт шлёт field_ids
+    field_ids: List[int]   # фронт шлёт field_ids (snake_case)
 
 class FormCreate(FormBase):
     pass
@@ -58,7 +58,7 @@ class Form(FormBase):
 class TableBase(BaseModel):
     name: str
     formId: int          # фронт шлёт formId (camelCase)
-    columns: List[int]   # фронт шлёт columns как список ID полей
+    columns: List[int]
 
 class TableCreate(TableBase):
     pass

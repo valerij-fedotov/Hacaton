@@ -19,7 +19,6 @@ async def get_fields(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[
         .options(selectinload(models.Field.field_type))
     )
     db_fields = result.scalars().all()
-    # Преобразуем в формат, ожидаемый фронтом
     out = []
     for f in db_fields:
         out.append(schemas.Field(
@@ -72,7 +71,6 @@ async def get_field_by_key(db: AsyncSession, key: str) -> Optional[schemas.Field
     )
 
 async def create_field(db: AsyncSession, field: schemas.FieldCreate) -> schemas.Field:
-    # Находим type_id по строковому типу
     ft = await get_field_type_by_code(db, field.type)
     if not ft:
         raise ValueError(f"Unknown field type: {field.type}")
@@ -90,7 +88,6 @@ async def create_field(db: AsyncSession, field: schemas.FieldCreate) -> schemas.
         await db.rollback()
         raise ValueError("Field with this key already exists")
     await db.refresh(db_field)
-    # Возвращаем в формате фронта
     return schemas.Field(
         id=db_field.id,
         name=db_field.name,
@@ -105,7 +102,6 @@ async def update_field(db: AsyncSession, field_id: int, field_update: schemas.Fi
     db_field = await db.get(models.Field, field_id)
     if not db_field:
         return None
-    # Обновляем
     if field_update.name is not None:
         db_field.name = field_update.name
     if field_update.key is not None:
@@ -119,7 +115,6 @@ async def update_field(db: AsyncSession, field_id: int, field_update: schemas.Fi
         db_field.config = field_update.options
     await db.commit()
     await db.refresh(db_field)
-    # Получаем тип
     ft = await db.get(models.FieldType, db_field.type_id)
     return schemas.Field(
         id=db_field.id,
@@ -139,6 +134,7 @@ async def delete_field(db: AsyncSession, field_id: int) -> bool:
     await db.commit()
     return True
 
+# -------- Forms ----------
 # -------- Forms ----------
 async def get_forms(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[schemas.Form]:
     result = await db.execute(
@@ -208,9 +204,7 @@ async def update_form(db: AsyncSession, form_id: int, form_update: schemas.FormU
     if form_update.name is not None:
         db_form.name = form_update.name
     if form_update.field_ids is not None:
-        # удаляем старые связи
         await db.execute(delete(models.FormField).where(models.FormField.form_id == form_id))
-        # добавляем новые
         for idx, fid in enumerate(form_update.field_ids):
             ff = models.FormField(
                 form_id=db_form.id,
@@ -222,7 +216,6 @@ async def update_form(db: AsyncSession, form_id: int, form_update: schemas.FormU
             db.add(ff)
     await db.commit()
     await db.refresh(db_form)
-    # Получаем актуальные field_ids
     result = await db.execute(
         select(models.FormField.field_id)
         .where(models.FormField.form_id == form_id)
@@ -233,6 +226,37 @@ async def update_form(db: AsyncSession, form_id: int, form_update: schemas.FormU
         id=db_form.id,
         name=db_form.name,
         field_ids=field_ids,
+        created_at=db_form.created_at,
+        updated_at=db_form.updated_at
+    )
+    db_form = await db.get(models.Form, form_id)
+    if not db_form:
+        return None
+    if form_update.name is not None:
+        db_form.name = form_update.name
+    if form_update.fieldIds is not None:
+        await db.execute(delete(models.FormField).where(models.FormField.form_id == form_id))
+        for idx, fid in enumerate(form_update.fieldIds):
+            ff = models.FormField(
+                form_id=db_form.id,
+                field_id=fid,
+                sort_order=idx,
+                is_required=False,
+                width='full'
+            )
+            db.add(ff)
+    await db.commit()
+    await db.refresh(db_form)
+    result = await db.execute(
+        select(models.FormField.field_id)
+        .where(models.FormField.form_id == form_id)
+        .order_by(models.FormField.sort_order)
+    )
+    field_ids = [row[0] for row in result.all()]
+    return schemas.Form(
+        id=db_form.id,
+        name=db_form.name,
+        fieldIds=field_ids,
         created_at=db_form.created_at,
         updated_at=db_form.updated_at
     )
@@ -260,7 +284,7 @@ async def get_tables(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[
         out.append(schemas.Table(
             id=t.id,
             name=t.name,
-            formId=t.form_id,   # преобразуем в camelCase
+            formId=t.form_id,
             columns=columns,
             created_at=t.created_at,
             updated_at=t.updated_at
@@ -287,7 +311,6 @@ async def get_table(db: AsyncSession, table_id: int) -> Optional[schemas.Table]:
     )
 
 async def create_table(db: AsyncSession, table: schemas.TableCreate) -> Optional[schemas.Table]:
-    # Проверка формы
     form = await db.get(models.Form, table.formId)
     if not form:
         return None
@@ -320,15 +343,12 @@ async def update_table(db: AsyncSession, table_id: int, table_update: schemas.Ta
     if table_update.name is not None:
         db_table.name = table_update.name
     if table_update.formId is not None:
-        # проверяем, существует ли форма
         form = await db.get(models.Form, table_update.formId)
         if not form:
             return None
         db_table.form_id = table_update.formId
     if table_update.columns is not None:
-        # удаляем старые колонки
         await db.execute(delete(models.TableColumn).where(models.TableColumn.table_id == table_id))
-        # добавляем новые
         for idx, fid in enumerate(table_update.columns):
             tc = models.TableColumn(
                 table_id=db_table.id,
@@ -339,7 +359,6 @@ async def update_table(db: AsyncSession, table_id: int, table_update: schemas.Ta
             db.add(tc)
     await db.commit()
     await db.refresh(db_table)
-    # Получаем актуальные колонки
     result = await db.execute(
         select(models.TableColumn.field_id)
         .where(models.TableColumn.table_id == table_id)

@@ -2,17 +2,10 @@
   <div class="forms-manager">
     <div class="forms-manager__toolbar">
       <span>Выберите или создайте форму</span>
-      <button class="forms-manager__btn" @click="createNewForm">
-        + Новая форма
-      </button>
+      <button class="forms-manager__btn" @click="createNewForm">+ Новая форма</button>
     </div>
-
     <div class="forms-manager__list">
-      <div
-        v-for="form in forms"
-        :key="form.id"
-        class="forms-manager__form-item"
-      >
+      <div v-for="form in forms" :key="form.id" class="forms-manager__form-item">
         <button
           class="forms-manager__select-form"
           :class="{ active: selectedFormId === form.id }"
@@ -20,15 +13,11 @@
         >
           {{ form.name }}
         </button>
-        <button
-          class="forms-manager__delete-form"
-          @click="deleteFormById(form.id)"
-        >
+        <button class="forms-manager__delete-form" @click="deleteFormById(form.id)">
           Удалить форму
         </button>
       </div>
     </div>
-
     <div class="forms-manager__editor">
       <h3>Редактор формы</h3>
       <div class="forms-manager__form-group">
@@ -36,25 +25,16 @@
         <input v-model="editingFormName" placeholder="Например: Учет ДТП" />
       </div>
       <div class="forms-manager__fields-container">
-        <div>
-          <strong
-            >Выбранные поля (порядок можно менять перетаскиванием):</strong
-          >
-        </div>
+        <div><strong>Выбранные поля (порядок можно менять перетаскиванием):</strong></div>
         <div class="forms-manager__selected-fields">
           <div
             v-for="fieldId in selectedFieldIds"
             :key="fieldId"
             class="forms-manager__selected-field"
           >
-            {{ getFieldById(fieldId)?.name }} ({{
-              getFieldById(fieldId)?.type
-            }})
-            <button
-              class="forms-manager__remove-field"
-              @click="removeFieldFromForm(fieldId)"
-            >
-              ✖️
+            {{ getFieldById(fieldId)?.name }} ({{ getFieldById(fieldId)?.type }})
+            <button class="forms-manager__remove-field" @click="removeFieldFromForm(fieldId)">
+              ✖
             </button>
           </div>
         </div>
@@ -70,35 +50,28 @@
           </button>
         </div>
       </div>
-      <button class="forms-manager__save-btn" @click="saveForm">
-        Сохранить форму
-      </button>
+      <button class="forms-manager__save-btn" @click="saveForm">Сохранить форму</button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from "vue";
-import {
-  fields,
-  forms,
-  getFieldById,
-  addForm,
-  updateForm,
-  deleteForm,
-} from "../stores/appData";
+import { fields, forms, getFieldById, addForm, updateForm, deleteForm } from "../stores/appData";
 
 const selectedFormId = ref(null);
 const editingFormName = ref("");
 
 const selectedFieldIds = computed(() => {
-  const form = forms.value.find((f) => f.id === selectedFormId.value);
-  return form ? form.fieldIds : [];
+  if (!selectedFormId.value) return [];
+  const form = forms.value.find(f => f.id === selectedFormId.value);
+  if (!form) return [];
+  return form.field_ids || [];   
 });
 
 const availableFields = computed(() => {
   const used = selectedFieldIds.value;
-  return fields.value.filter((f) => !used.includes(f.id));
+  return fields.value.filter(f => !used.includes(f.id));
 });
 
 function createNewForm() {
@@ -108,16 +81,12 @@ function createNewForm() {
 
 function selectForm(id) {
   selectedFormId.value = id;
-  const form = forms.value.find((f) => f.id === id);
+  const form = forms.value.find(f => f.id === id);
   editingFormName.value = form ? form.name : "";
 }
 
 function deleteFormById(id) {
-  if (
-    confirm(
-      "Удалить форму? Все данные по ней останутся, но будут недоступны через интерфейс."
-    )
-  ) {
+  if (confirm("Удалить форму? Все данные по ней останутся, но будут недоступны через интерфейс.")) {
     deleteForm(id);
     if (selectedFormId.value === id) {
       selectedFormId.value = null;
@@ -131,26 +100,27 @@ function addFieldToForm(fieldId) {
     alert("Сначала выберите или создайте форму");
     return;
   }
-  const form = forms.value.find((f) => f.id === selectedFormId.value);
-  if (form && !form.fieldIds.includes(fieldId)) {
-    form.fieldIds.push(fieldId);
+  const form = forms.value.find(f => f.id === selectedFormId.value);
+  if (form && !form.field_ids.includes(fieldId)) {
+    form.field_ids.push(fieldId);
   }
 }
 
 function removeFieldFromForm(fieldId) {
   if (!selectedFormId.value) return;
-  const form = forms.value.find((f) => f.id === selectedFormId.value);
+  const form = forms.value.find(f => f.id === selectedFormId.value);
   if (form) {
-    form.fieldIds = form.fieldIds.filter((id) => id !== fieldId);
+    form.field_ids = form.field_ids.filter(id => id !== fieldId);
   }
 }
+
 function saveForm() {
   if (!editingFormName.value.trim()) {
     alert("Введите название формы");
     return;
   }
   if (!selectedFormId.value) {
-    addForm({ name: editingFormName.value, field_ids: [] });  
+    addForm({ name: editingFormName.value, field_ids: [] });
     alert("Форма создана. Добавьте поля в редакторе.");
   } else {
     updateForm(selectedFormId.value, { name: editingFormName.value });

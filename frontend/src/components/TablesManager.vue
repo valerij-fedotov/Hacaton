@@ -2,47 +2,23 @@
   <div class="tables-manager">
     <div class="tables-manager__toolbar">
       <span>Доступные таблицы</span>
-      <button class="tables-manager__btn" @click="createTableViewPrompt">
-        + Создать представление (таблицу)
-      </button>
+      <button class="tables-manager__btn" @click="createTableViewPrompt">+ Создать представление (таблицу)</button>
     </div>
-
     <div class="tables-manager__list">
-      <div
-        v-for="table in tables"
-        :key="table.id"
-        class="tables-manager__table-item"
-      >
-        <button
-          class="tables-manager__show-table"
-          @click="showTableData(table.id)"
-        >
-          📊 {{ table.name }}
+      <div v-for="table in tables" :key="table.id" class="tables-manager__table-item">
+        <button class="tables-manager__show-table" @click="showTableData(table.id)">
+          {{ table.name }}
         </button>
-        <button
-          class="tables-manager__delete-table"
-          @click="deleteTableById(table.id)"
-        >
-          🗑️
-        </button>
+        <button class="tables-manager__delete-table" @click="deleteTableById(table.id)">🗑️</button>
       </div>
     </div>
-
     <div class="tables-manager__data" v-html="activeTableHtml"></div>
 
     <!-- Модальное окно для записи -->
-    <div
-      v-if="modalVisible"
-      class="tables-manager__modal"
-      @click.self="closeModal"
-    >
+    <div v-if="modalVisible" class="tables-manager__modal" @click.self="closeModal">
       <div class="tables-manager__modal-content">
         <h3>{{ modalRecord ? "Редактирование" : "Новая запись" }}</h3>
-        <div
-          v-for="field in modalFields"
-          :key="field.id"
-          class="tables-manager__form-group"
-        >
+        <div v-for="field in modalFields" :key="field.id" class="tables-manager__form-group">
           <label>{{ field.name }}</label>
           <input
             v-if="field.type === 'text' || field.type === 'date'"
@@ -63,35 +39,23 @@
             v-else-if="field.type === 'select'"
             v-model="modalFormData[field.key]"
           >
-            <option v-for="opt in field.options.values || []" :key="opt">
-              {{ opt }}
-            </option>
+            <option v-for="opt in field.options.values || []" :key="opt">{{ opt }}</option>
           </select>
           <select
             v-else-if="field.type === 'multiselect'"
             multiple
             v-model="modalFormData[field.key]"
           >
-            <option v-for="opt in field.options.values || []" :key="opt">
-              {{ opt }}
-            </option>
+            <option v-for="opt in field.options.values || []" :key="opt">{{ opt }}</option>
           </select>
           <input
             v-else-if="field.type === 'coordinates'"
-            type="text"
-            placeholder="lat,lng"
             v-model="modalFormData[field.key]"
+            placeholder="широта, долгота"
           />
-          <input v-else type="text" v-model="modalFormData[field.key]" />
         </div>
-        <div class="tables-manager__modal-actions">
-          <button class="tables-manager__save-btn" @click="saveModalRecord">
-            Сохранить
-          </button>
-          <button class="tables-manager__cancel-btn" @click="closeModal">
-            Отмена
-          </button>
-        </div>
+        <button @click="saveModalRecord">Сохранить</button>
+        <button @click="closeModal">Отмена</button>
       </div>
     </div>
   </div>
@@ -100,104 +64,96 @@
 <script setup>
 import { ref, computed } from "vue";
 import {
-  tables,
-  records,
+  fields,
+  forms,          // добавлен импорт
   getFieldById,
   getFormById,
   getFieldsForForm,
   addTable,
   deleteTable,
-  addRecord,
-  updateRecord,
+  tables,
+  records,
+  getRecords,
   deleteRecord,
+  updateRecord,
+  addRecord,
 } from "../stores/appData";
 
-const activeTableHtml = ref("<p>Выберите таблицу слева или создайте новую</p>");
+const activeTableHtml = ref("");
 const modalVisible = ref(false);
 const modalRecord = ref(null);
 const modalFormId = ref(null);
 const modalFormData = ref({});
-
-const modalFields = computed(() => {
-  if (!modalFormId.value) return [];
-  const form = getFormById(modalFormId.value);
-  if (!form) return [];
-  return form.fieldIds.map((id) => getFieldById(id)).filter((f) => f);
-});
+const modalFields = ref([]);
 
 function deleteTableById(id) {
   if (confirm("Удалить таблицу?")) {
     deleteTable(id);
-    activeTableHtml.value = "<p>Таблица удалена</p>";
+    activeTableHtml.value = "";
   }
 }
 
-function showTableData(tableId) {
-  const table = tables.value.find((t) => t.id === tableId);
+async function showTableData(tableId) {
+  const table = tables.value.find(t => t.id === tableId);
   if (!table) return;
   const form = getFormById(table.formId);
   if (!form) return;
-  const formRecords = records[form.id] || [];
-  const columns = table.columns
-    .map((colId) => getFieldById(colId))
-    .filter((f) => f);
-
-  let html = `<h3>${escapeHtml(table.name)} (форма: ${escapeHtml(
-    form.name
-  )})</h3>
-              <button class="tables-manager__add-record-btn">➕ Добавить запись</button>
-              <table class="tables-manager__data-table"><thead>`;
-  columns.forEach((col) => {
-    html += `<th>${escapeHtml(col.name)}</th>`;
-  });
-  html += `<th>Действия</th></thead><tbody>`;
-  formRecords.forEach((rec) => {
-    html += ``;
-    columns.forEach((col) => {
-      let val = rec[col.key];
-      if (col.type === "checkbox") val = val ? "✅" : "❌";
-      if (col.type === "multiselect" && Array.isArray(val))
-        val = val.join(", ");
-      if (col.type === "coordinates" && val)
-        val = `<a href="#" onclick="alert('Показать карту: ${val}')">📍 на карте</a>`;
-      html += `<td>${val !== undefined ? val : ""}</td>`;
-    });
-    html += `<td><button class="edit-record" data-id="${rec.id}">✏️</button>
-             <button class="delete-record" data-id="${rec.id}">🗑️</button></td>`;
-    html += `</tr>`;
-  });
-  html += `</tbody></table>`;
+  const formFields = getFieldsForForm(form.id);
+  const recordsForForm = records[form.id] || [];
+  let html = '<table class="tables-manager__data-table"><thead><tr>';
+  for (const colId of table.columns) {
+    const field = formFields.find(f => f.id === colId);
+    if (field) {
+      html += `<th>${field.name}</th>`;
+    }
+  }
+  html += '<th>Действия</th></tr></thead><tbody>';
+  for (const rec of recordsForForm) {
+    html += '<tr>';
+    for (const colId of table.columns) {
+      const field = formFields.find(f => f.id === colId);
+      if (field) {
+        let val = rec[field.key];
+        if (val === undefined) val = "";
+        if (typeof val === "object") val = JSON.stringify(val);
+        html += `<td>${escapeHtml(String(val))}</td>`;
+      }
+    }
+    html += `<td>
+      <button class="edit-record" data-id="${rec.id}">✏️</button>
+      <button class="delete-record" data-id="${rec.id}">🗑️</button>
+    </td></tr>`;
+  }
+  html += '</tbody></table><button class="tables-manager__add-record-btn" data-form-id="' + form.id + '">+ Новая запись</button>';
   activeTableHtml.value = html;
-
   setTimeout(() => {
-    const addBtn = document.querySelector(".tables-manager__add-record-btn");
-    if (addBtn)
-      addBtn.addEventListener("click", () =>
-        openRecordModal(null, table.formId)
-      );
-    document.querySelectorAll(".edit-record").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const recId = btn.dataset.id;
-        const rec = formRecords.find((r) => r.id === recId);
-        if (rec) openRecordModal(rec, table.formId);
+    document.querySelectorAll(".edit-record").forEach(btn => {
+      btn.addEventListener("click", e => {
+        const recId = parseInt(btn.dataset.id);
+        const record = recordsForForm.find(r => r.id === recId);
+        if (record) openRecordModal(record, form.id);
       });
     });
-    document.querySelectorAll(".delete-record").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const recId = btn.dataset.id;
+    document.querySelectorAll(".delete-record").forEach(btn => {
+      btn.addEventListener("click", async e => {
+        const recId = parseInt(btn.dataset.id);
         if (confirm("Удалить запись?")) {
-          deleteRecord(table.formId, recId);
+          await deleteRecord(form.id, recId);
           showTableData(tableId);
         }
       });
     });
+    const addBtn = document.querySelector(".tables-manager__add-record-btn");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => openRecordModal(null, form.id));
+    }
   }, 0);
 }
 
 function createTableViewPrompt() {
   const formId = prompt(
     "Выберите ID формы, на основе которой создать таблицу (доступные формы: " +
-      forms.value.map((f) => `${f.id}:${f.name}`).join(", ")
+      forms.value.map(f => `${f.id}:${f.name}`).join(", ")
   );
   if (!formId) return;
   const fid = parseInt(formId);
@@ -210,13 +166,13 @@ function createTableViewPrompt() {
   const formFields = getFieldsForForm(fid);
   const columnsPrompt =
     "Введите ID полей через запятую (доступны: " +
-    formFields.map((f) => `${f.id}:${f.name}`).join(", ");
+    formFields.map(f => `${f.id}:${f.name}`).join(", ") + ")";
   let colIds = prompt(columnsPrompt);
   if (!colIds) return;
   let colArray = colIds
     .split(",")
-    .map((s) => parseInt(s.trim()))
-    .filter((id) => formFields.find((f) => f.id === id));
+    .map(s => parseInt(s.trim()))
+    .filter(id => formFields.find(f => f.id === id));
   if (colArray.length === 0) {
     alert("Нет валидных полей");
     return;
@@ -230,18 +186,18 @@ function openRecordModal(record, formId) {
   modalRecord.value = record;
   modalFormId.value = formId;
   const form = getFormById(formId);
+  if (!form) return;
+  const fieldsForForm = getFieldsForForm(formId);
+  modalFields.value = fieldsForForm;
   if (record) {
     modalFormData.value = { ...record };
   } else {
     const initial = {};
-    form.fieldIds.forEach((fieldId) => {
-      const field = getFieldById(fieldId);
-      if (field) {
-        if (field.type === "checkbox") initial[field.key] = false;
-        else if (field.type === "multiselect") initial[field.key] = [];
-        else initial[field.key] = "";
-      }
-    });
+    for (const field of fieldsForForm) {
+      if (field.type === "checkbox") initial[field.key] = false;
+      else if (field.type === "multiselect") initial[field.key] = [];
+      else initial[field.key] = "";
+    }
     modalFormData.value = initial;
   }
 }
@@ -251,18 +207,19 @@ function closeModal() {
   modalRecord.value = null;
   modalFormId.value = null;
   modalFormData.value = {};
+  modalFields.value = [];
 }
 
-function saveModalRecord() {
+async function saveModalRecord() {
   const formId = modalFormId.value;
   if (!formId) return;
   if (modalRecord.value) {
-    updateRecord(formId, modalRecord.value.id, modalFormData.value);
+    await updateRecord(formId, modalRecord.value.id, modalFormData.value);
   } else {
-    addRecord(formId, modalFormData.value);
+    await addRecord(formId, modalFormData.value);
   }
   closeModal();
-  const tableToRefresh = tables.value.find((t) => t.formId === formId);
+  const tableToRefresh = tables.value.find(t => t.formId === formId);
   if (tableToRefresh) showTableData(tableToRefresh.id);
 }
 

@@ -39,7 +39,6 @@ export const records = reactive<Record<number, LocalRecord[]>>({});
 // Вспомогательные функции для преобразования
 function mapApiRecordToLocal(apiRecord: FormRecord, formFields: Field[]): LocalRecord {
   const localRecord: LocalRecord = { id: apiRecord.id };
-  // Распаковываем data в плоские поля
   for (const [key, value] of Object.entries(apiRecord.data)) {
     localRecord[key] = value;
   }
@@ -67,20 +66,14 @@ function mapLocalRecordToApi(
 // Инициализация: загружаем все данные с сервера
 export async function loadAllData(): Promise<void> {
   try {
-    // Загружаем поля
     fields.value = await apiGetFields();
-    // Загружаем формы
     forms.value = await apiGetForms();
-    // Загружаем таблицы
     tables.value = await apiGetTables();
-    // Загружаем записи и группируем по form_id
     const allRecords = await apiGetRecords();
-    // Очищаем records
     for (const key in records) delete records[key];
     for (const apiRec of allRecords) {
       const formId = apiRec.form_id;
       if (!records[formId]) records[formId] = [];
-      // Для преобразования нужны поля формы
       const form = forms.value.find(f => f.id === formId);
       if (form) {
         const formFields = form.field_ids
@@ -89,13 +82,11 @@ export async function loadAllData(): Promise<void> {
         const localRec = mapApiRecordToLocal(apiRec, formFields);
         records[formId].push(localRec);
       } else {
-        // если форма не найдена, добавляем как есть
         records[formId].push({ id: apiRec.id, ...apiRec.data });
       }
     }
   } catch (error) {
     console.error('Failed to load data from API', error);
-    // В случае ошибки можно оставить пустые массивы или использовать fallback
   }
 }
 
@@ -116,14 +107,12 @@ export async function updateField(id: number, updated: Partial<Field>): Promise<
 export async function deleteField(id: number): Promise<void> {
   await apiDeleteField(id);
   fields.value = fields.value.filter(f => f.id !== id);
-  // Удаляем поле из форм (в API это не делается автоматически, но можно обновить формы)
-  // Для простоты оставим как есть; компонент FormsManager должен будет обновить формы.
 }
 
 export async function addForm(form: any) {
   const apiForm = {
     name: form.name,
-    field_ids: form.field_ids || form.fieldIds || []   // поддержка обоих вариантов
+    field_ids: form.field_ids || form.fieldIds || []
   };
   const newForm = await apiCreateForm(apiForm);
   forms.value.push(newForm);
@@ -133,7 +122,7 @@ export async function addForm(form: any) {
 export async function updateForm(id: number, updated: any) {
   const apiUpdate = {
     name: updated.name,
-    field_ids: updated.field_ids || updated.fieldIds   // для обновления
+    field_ids: updated.field_ids || updated.fieldIds
   };
   const updatedForm = await apiUpdateForm(id, apiUpdate);
   const idx = forms.value.findIndex(f => f.id === id);
@@ -144,9 +133,7 @@ export async function updateForm(id: number, updated: any) {
 export async function deleteForm(id: number): Promise<void> {
   await apiDeleteForm(id);
   forms.value = forms.value.filter(f => f.id !== id);
-  // Удаляем все таблицы, связанные с формой
   tables.value = tables.value.filter(t => t.form_id !== id);
-  // Удаляем записи этой формы из локального records
   if (records[id]) delete records[id];
 }
 
@@ -183,15 +170,12 @@ export async function updateRecord(formId: number, recordId: number, data: Parti
   const formFields = form.field_ids
     .map(id => fields.value.find(f => f.id === id))
     .filter((f): f is Field => f !== undefined);
-  // Находим локальную запись
   const localRecords = records[formId] || [];
   const localRec = localRecords.find(r => r.id === recordId);
   if (!localRec) throw new Error(`Record ${recordId} not found`);
-  // Объединяем обновлённые данные
   const updatedLocal = { ...localRec, ...data };
   const apiRecord = mapLocalRecordToApi(formId, updatedLocal, formFields);
   const updatedApiRecord = await apiUpdateRecord(recordId, apiRecord);
-  // Обновляем локальную запись
   const idx = localRecords.findIndex(r => r.id === recordId);
   if (idx !== -1) {
     localRecords[idx] = mapApiRecordToLocal(updatedApiRecord, formFields);
@@ -205,7 +189,7 @@ export async function deleteRecord(formId: number, recordId: number): Promise<vo
   }
 }
 
-// Для совместимости со старым кодом оставим синхронные геттеры
+// Синхронные геттеры
 export function getFieldById(id: number): Field | undefined {
   return fields.value.find(f => f.id === id);
 }
@@ -220,4 +204,9 @@ export function getFieldsForForm(formId: number): Field[] {
   return form.field_ids
     .map(id => getFieldById(id))
     .filter((f): f is Field => f !== undefined);
+}
+
+// Добавленный экспорт для совместимости с TablesManager.vue
+export function getRecords(formId: number): LocalRecord[] {
+  return records[formId] || [];
 }

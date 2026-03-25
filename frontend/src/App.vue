@@ -11,6 +11,15 @@ import TheHeader from "./components/TheHeader.vue";
 </script>
 
 <style>
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #3ecf8e;
+}
+
 * {
   box-sizing: border-box;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -26,5 +35,5 @@ body {
 }
 </style>
 <script lang="ts">
-  export default {};
+export default {};
 </script>

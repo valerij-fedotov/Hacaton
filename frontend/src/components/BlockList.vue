@@ -105,16 +105,32 @@
             {{ getProps(field) }}
           </div>
         </div>
-        <div class="fields-manager__card-actions">
-          <button class="fields-manager__edit-btn" @click="editField(field)">
-            ✏️
-          </button>
+
+        <div class="fields-manager__card-menu">
           <button
-            class="fields-manager__delete-btn"
-            @click="deleteFieldById(field.id)"
+            class="fields-manager__menu-btn"
+            @click.stop="toggleMenu(field.id)"
           >
-            🗑️
+            ⋮
           </button>
+          <div
+            v-if="openMenuId === field.id"
+            class="fields-manager__dropdown"
+            @click.stop
+          >
+            <button
+              class="fields-manager__dropdown-item"
+              @click="editField(field)"
+            >
+              ✏️ Редактировать
+            </button>
+            <button
+              class="fields-manager__dropdown-item fields-manager__dropdown-item--danger"
+              @click="deleteFieldById(field.id)"
+            >
+              🗑️ Удалить
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -122,13 +138,13 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import {
   fields,
   addField,
   updateField,
   deleteField,
-  getFieldById,
+  forms,
 } from "../stores/appData";
 
 const showForm = ref(false);
@@ -141,6 +157,7 @@ const formData = ref({
   options: {},
 });
 const optionsString = ref("");
+const openMenuId = ref(null);
 
 function openAddForm() {
   editMode.value = false;
@@ -150,6 +167,7 @@ function openAddForm() {
 }
 
 function editField(field) {
+  closeMenu();
   editMode.value = true;
   formData.value = {
     id: field.id,
@@ -160,7 +178,7 @@ function editField(field) {
   };
   if (
     ["select", "multiselect", "radio"].includes(field.type) &&
-    field.options.values
+    field.options?.values
   ) {
     optionsString.value = field.options.values.join(", ");
   } else {
@@ -173,7 +191,7 @@ function closeForm() {
   showForm.value = false;
 }
 
-function saveField() {
+async function saveField() {
   if (!formData.value.name.trim()) {
     alert("Введите название поля");
     return;
@@ -182,9 +200,10 @@ function saveField() {
     alert("Введите технический ключ");
     return;
   }
-  // Проверка уникальности key (кроме текущего поля при редактировании)
   const existing = fields.value.find(
-    (f) => f.key === formData.value.key && f.id !== formData.value.id
+    (f) =>
+      f.key.toLowerCase() === formData.value.key.toLowerCase() &&
+      f.id !== formData.value.id
   );
   if (existing) {
     alert("Поле с таким ключом уже существует");
@@ -196,7 +215,7 @@ function saveField() {
     if (optionsString.value.trim()) {
       newOptions.values = optionsString.value.split(",").map((s) => s.trim());
     } else {
-      newOptions.values = [];
+      delete newOptions.values;
     }
   }
 
@@ -207,17 +226,35 @@ function saveField() {
     options: newOptions,
   };
 
-  if (editMode.value) {
-    updateField(formData.value.id, field);
-  } else {
-    addField(field);
+  try {
+    if (editMode.value) {
+      await updateField(formData.value.id, field);
+    } else {
+      await addField(field);
+    }
+    closeForm();
+  } catch (error) {
+    console.error(error);
+    alert("Ошибка при сохранении поля");
   }
-  closeForm();
 }
 
-function deleteFieldById(id) {
+async function deleteFieldById(id) {
+  closeMenu();
+  const usedInForms = forms.value.some((form) => form.field_ids.includes(id));
+  if (usedInForms) {
+    alert(
+      "Поле используется в одной или нескольких формах. Сначала удалите поле из форм."
+    );
+    return;
+  }
   if (confirm("Удалить поле? Это может затронуть формы.")) {
-    deleteField(id);
+    try {
+      await deleteField(id);
+    } catch (error) {
+      console.error(error);
+      alert("Ошибка при удалении поля");
+    }
   }
 }
 
@@ -240,27 +277,53 @@ function getDescription(field) {
 
 function getProps(field) {
   const parts = [];
-  if (field.type === "number") {
+  if (field.type === "number" && field.options) {
     if (field.options.min !== undefined) parts.push(`min=${field.options.min}`);
     if (field.options.max !== undefined) parts.push(`max=${field.options.max}`);
   }
   if (
     ["select", "multiselect", "radio"].includes(field.type) &&
-    field.options.values?.length
+    field.options?.values?.length
   ) {
     parts.push(`${field.options.values.length} вариантов`);
   }
   return parts.join(", ");
 }
+
+function toggleMenu(id) {
+  openMenuId.value = openMenuId.value === id ? null : id;
+}
+
+function closeMenu() {
+  openMenuId.value = null;
+}
+
+function handleClickOutside(event) {
+  if (openMenuId.value !== null) {
+    const menuBtn = event.target.closest(".fields-manager__menu-btn");
+    const dropdown = event.target.closest(".fields-manager__dropdown");
+    if (!menuBtn && !dropdown) {
+      closeMenu();
+    }
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
 </script>
 
 <style scoped>
-/* Те же стили, что в вашем FieldsManager, только классы оставлены как есть */
+/* Тёмная тема */
 .fields-manager {
   width: 100%;
   max-width: 100%;
   padding: 20px;
-  background: #f8f9fa;
+  background: #121212;
   box-sizing: border-box;
   min-height: 100vh;
 }
@@ -270,8 +333,8 @@ function getProps(field) {
   margin-bottom: 24px;
 }
 .fields-manager__add-btn {
-  background: #42b983;
-  color: white;
+  background: #3ecf8e;
+  color: #121212;
   border: none;
   padding: 8px 20px;
   border-radius: 6px;
@@ -280,7 +343,8 @@ function getProps(field) {
   transition: background 0.2s;
 }
 .fields-manager__add-btn:hover {
-  background: #369f6e;
+  background: #2eab72;
+  color: #ffffff;
 }
 .fields-manager__modal {
   position: fixed;
@@ -288,23 +352,25 @@ function getProps(field) {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
 }
 .fields-manager__form {
-  background: white;
+  background: #1e1e1e;
   padding: 24px;
   border-radius: 12px;
   width: 90%;
   max-width: 500px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  color: #ffffff;
 }
 .fields-manager__form-title {
   margin-top: 0;
   margin-bottom: 20px;
+  color: #ffffff;
 }
 .fields-manager__form-group {
   margin-bottom: 16px;
@@ -320,17 +386,24 @@ function getProps(field) {
   display: block;
   font-weight: 600;
   margin-bottom: 6px;
-  color: #000;
+  color: #ffffff;
 }
 .fields-manager__input,
 .fields-manager__select,
 .fields-manager__textarea {
   width: 100%;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #afafaf;
   border-radius: 6px;
   font-size: 1rem;
   box-sizing: border-box;
+  background: #2a2a2a;
+  color: #ffffff;
+}
+.fields-manager__input::placeholder,
+.fields-manager__select::placeholder,
+.fields-manager__textarea::placeholder {
+  color: #afafaf;
 }
 .fields-manager__form-actions {
   display: flex;
@@ -339,20 +412,28 @@ function getProps(field) {
   margin-top: 20px;
 }
 .fields-manager__save-btn {
-  background: #42b983;
-  color: white;
+  background: #3ecf8e;
+  color: #121212;
   border: none;
   padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
 }
+.fields-manager__save-btn:hover {
+  background: #2eab72;
+  color: #ffffff;
+}
 .fields-manager__cancel-btn {
-  background: #6c757d;
-  color: white;
+  background: #afafaf;
+  color: #121212;
   border: none;
   padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
+}
+.fields-manager__cancel-btn:hover {
+  background: #8f8f8f;
+  color: #ffffff;
 }
 .fields-manager__grid {
   display: grid;
@@ -361,18 +442,19 @@ function getProps(field) {
   width: 100%;
 }
 .fields-manager__card {
-  background: white;
+  background: #1e1e1e;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   padding: 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
 .fields-manager__card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 .fields-manager__card-content {
   flex: 1;
@@ -381,54 +463,82 @@ function getProps(field) {
   font-weight: 600;
   font-size: 1.1rem;
   margin-bottom: 8px;
-  color: #1e2a3a;
+  color: #ffffff;
 }
 .fields-manager__card-type {
   font-size: 0.7rem;
   font-family: monospace;
-  background: #e9ecef;
+  background: #2a2a2a;
   display: inline-block;
   padding: 2px 6px;
   border-radius: 20px;
-  color: #495057;
+  color: #afafaf;
   margin-bottom: 12px;
 }
 .fields-manager__card-description {
   font-size: 0.85rem;
-  color: #495057;
+  color: #afafaf;
   margin-bottom: 8px;
 }
 .fields-manager__card-props {
   font-size: 0.75rem;
-  color: #6c757d;
+  color: #afafaf;
   font-style: italic;
-  background: #f1f3f5;
+  background: #2a2a2a;
   padding: 2px 6px;
   border-radius: 4px;
   display: inline-block;
 }
-.fields-manager__card-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+.fields-manager__card-menu {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
-.fields-manager__edit-btn,
-.fields-manager__delete-btn {
+.fields-manager__menu-btn {
   background: none;
   border: none;
-  font-size: 1.2rem;
+  font-size: 1.6rem;
+  line-height: 1;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 0 4px;
+  color: #afafaf;
+  transition: color 0.2s;
+}
+.fields-manager__menu-btn:hover {
+  color: #ffffff;
+}
+.fields-manager__dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #2a2a2a;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 150px;
+  z-index: 10;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.fields-manager__dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
   transition: background 0.2s;
+  color: #ffffff;
 }
-.fields-manager__edit-btn:hover {
-  background: #e9ecef;
+.fields-manager__dropdown-item:hover {
+  background: #3a3a3a;
 }
-.fields-manager__delete-btn:hover {
-  background: #ffe0e0;
-  color: #dc3545;
+.fields-manager__dropdown-item--danger {
+  color: #ff6b6b;
+}
+.fields-manager__dropdown-item--danger:hover {
+  background: #3a2a2a;
 }
 @media (max-width: 768px) {
   .fields-manager {
